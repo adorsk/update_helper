@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 import update_helper
 
 
@@ -6,23 +7,49 @@ class BaseTestCase(unittest.TestCase):
     pass
 
 
-class GetNestedTestCase(BaseTestCase):
+class DictGetNestedTestCase(BaseTestCase):
     def test_gets_nested(self):
         d = {'a': {'b': {'c': 1}}}
-        parent, key = update_helper.update_helper._get_nested(d, 'a.b.c')
-        self.assertEqual((parent, key), (d['a']['b'], 'c'))
+        prev_val, key, *methods = update_helper.update_helper._get_nested(
+            d, 'a.b.c')
+        self.assertEqual((prev_val, key), (1, 'c'))
 
     def test_creates_nonexistent_keys(self):
         d = {'a': {}}
-        parent, key = update_helper.update_helper._get_nested(d, 'a.b.c')
+        prev_val, key, *methods = update_helper.update_helper._get_nested(
+            d, 'a.b.c')
         self.assertEqual(d, {'a': {'b': {}}})
 
 
+class ObjGetNestedTestCase(BaseTestCase):
+    def test_gets_nested(self):
+        d = SimpleNamespace()
+        parent = d
+        for token in ['a', 'b', 'c']:
+            setattr(parent, token, SimpleNamespace())
+            parent = getattr(parent, token)
+        d.a.b.c = 1
+        prev_val, key, *methods = update_helper.update_helper._get_nested(
+            d, 'a.b.c')
+        self.assertEqual((prev_val, key), (1, 'c'))
+
+    def test_creates_nonexistent_keys(self):
+        d = SimpleNamespace()
+        prev_val, key, *methods = update_helper.update_helper._get_nested(
+            d, 'a.b.c.d')
+        self.assertEqual(d.a, {'b': {'c': {}}})
+
+
 class AddTestCase(BaseTestCase):
-    def test_adds(self):
+    def test_dict(self):
         d = {'a': 1}
         update_helper.update(d, [('a', '$add', 3)])
         self.assertEqual(d['a'], 4)
+
+    def test_obj(self):
+        d = SimpleNamespace(a=1)
+        update_helper.update(d, [('a', '$add', 3)])
+        self.assertEqual(d.a, 4)
 
 
 class MulTestCase(BaseTestCase):
