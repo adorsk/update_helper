@@ -6,18 +6,19 @@ from copy import deepcopy
 class UpdateHelper(object):
     def apply_action_to_obj(self, action, obj):
         target, command, *params = action
-        prev_val, key, setter, deleter = self._get_nested(obj, target)
+        nested_handle = self._get_nested_handle(obj, target)
+        key, accessors = nested_handle['key'], nested_handle['accessors']
         if command == '$unset':
-            deleter(key)
+            accessors['deleter'](key)
         else:
             handler = getattr(self, '_' + command.lstrip('$'))
+            prev_val = accessors['getter'](key, None)
             next_val = handler(prev_val, *params)
-            setter(key, next_val)
+            accessors['setter'](key, next_val)
 
-    def _get_nested(self, obj, target):
+    def _get_nested_handle(self, obj, target):
         parent = obj
         tokens = target.split(".")
-        key = tokens[0]
         for token in tokens[:-1]:
             try:
                 parent = self._get_attr_or_item(obj=parent, key=token)
@@ -28,16 +29,10 @@ class UpdateHelper(object):
                 except TypeError:
                     setattr(parent, token, next_parent)
                 parent = next_parent
-        key = tokens[-1]
-        if isinstance(parent, collections.abc.MutableMapping):
-            def setter(key, value): parent[key] = value
-            def deleter(key): del parent[key] # noqa
-            prev_value = parent.get(key)
-        else:
-            def setter(key, value): setattr(parent, key, value)
-            def deleter(key): del parent.key # noqa
-            prev_value = getattr(parent, key, None)
-        return prev_value, key, setter, deleter
+        return {
+            'key': tokens[-1],
+            'accessors': self._generate_accessors_for_obj(parent)
+        }
 
     def _get_attr_or_item(self, obj=None, key=None):
         if isinstance(key, str) and key.endswith('()'):
@@ -68,6 +63,35 @@ class UpdateHelper(object):
         if hasattr(obj, key):
             return getattr(obj, key)
         raise Exception("Does not have attr")
+
+    def _generate_accessors_for_obj(self, obj):
+        def getter(key, default=...):
+            try:
+                return obj[key]
+            except KeyError:
+                pass
+            except TypeError:
+                try:
+                    return getattr(obj, key)
+                except AttributeError:
+                    pass
+            if default is ...:
+                raise KeyError(key)
+            return default
+
+        def setter(key, value):
+            try:
+                obj[key] = value
+            except TypeError:
+                setattr(obj, key, value)
+
+        def deleter(key):
+            try:
+                del obj[key]
+            except TypeError:
+                delattr(obj, key)
+
+        return {'getter': getter, 'setter': setter, 'deleter': deleter}
 
     def _add(self, prev_val, n): return prev_val + n
 

@@ -8,16 +8,19 @@ class BaseTestCase(unittest.TestCase):
 
 
 class DictGetNestedTestCase(BaseTestCase):
-    def test_gets_nested(self):
+    def test_gets_nested_handle(self):
         d = {'a': {'b': {'c': 1}}}
-        prev_val, key, *methods = update_helper.update_helper._get_nested(
-            d, 'a.b.c')
-        self.assertEqual((prev_val, key), (1, 'c'))
+        handle = update_helper.update_helper._get_nested_handle(d, 'a.b.c')
+        key, accessors = handle['key'], handle['accessors']
+        self.assertEqual(accessors['getter'](key), 1)
+        accessors['setter'](key, 2)
+        self.assertEqual(d['a']['b']['c'], 2)
+        accessors['deleter'](key)
+        self.assertEqual(d['a']['b'], {})
 
     def test_creates_nonexistent_keys(self):
         d = {'a': {}}
-        prev_val, key, *methods = update_helper.update_helper._get_nested(
-            d, 'a.b.c')
+        update_helper.update_helper._get_nested_handle(d, 'a.b.c')
         self.assertEqual(d, {'a': {'b': {}}})
 
 
@@ -29,14 +32,17 @@ class ObjGetNestedTestCase(BaseTestCase):
             setattr(parent, token, SimpleNamespace())
             parent = getattr(parent, token)
         d.a.b.c = 1
-        prev_val, key, *methods = update_helper.update_helper._get_nested(
-            d, 'a.b.c')
-        self.assertEqual((prev_val, key), (1, 'c'))
+        handle = update_helper.update_helper._get_nested_handle(d, 'a.b.c')
+        key, accessors = handle['key'], handle['accessors']
+        self.assertEqual(accessors['getter'](key), 1)
+        accessors['setter'](key, 2)
+        self.assertEqual(d.a.b.c, 2)
+        accessors['deleter'](key)
+        self.assertFalse(hasattr(d.a.b, 'c'))
 
     def test_creates_nonexistent_keys(self):
         d = SimpleNamespace()
-        prev_val, key, *methods = update_helper.update_helper._get_nested(
-            d, 'a.b.c.d')
+        update_helper.update_helper._get_nested_handle(d, 'a.b.c.d')
         self.assertEqual(d.a, {'b': {'c': {}}})
 
 
